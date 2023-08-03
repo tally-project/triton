@@ -42,6 +42,7 @@
 
 #include <Python.h>
 #include <cctype>
+#include <iostream>
 #include <fstream>
 #include <optional>
 #include <pybind11/buffer_info.h>
@@ -1690,9 +1691,9 @@ void init_triton_translation(py::module &m) {
           // compile ptx with ptxas
           llvm::SmallString<64> fsrc;
           llvm::SmallString<64> flog;
-          llvm::sys::fs::createTemporaryFile("compile-ptx-src", "", fsrc);
+          llvm::sys::fs::createTemporaryFile("compile-ptx-src", "ptx", fsrc);
           llvm::sys::fs::createTemporaryFile("compile-ptx-log", "", flog);
-          std::string fbin = std::string(fsrc) + ".o";
+          std::string fbin = std::string(fsrc) + ".fatbin";
           llvm::FileRemover logRemover(flog);
           llvm::FileRemover binRemover(fbin);
           const char *_fsrc = fsrc.c_str();
@@ -1706,11 +1707,17 @@ void init_triton_translation(py::module &m) {
               triton::tools::getBoolEnv("TRITON_DISABLE_LINE_INFO")
                   ? ""
                   : " -lineinfo";
-          auto capabilitySuffix = (capability == 90) ? "a " : " ";
-          auto outputFileName = std::string(_fsrc) + ".o";
+          auto capabilitySuffix = (capability == 90) ? "a" : "";
+          auto outputFileName = fbin;
           auto logRedirect = " 2> " + std::string(_flog);
-          std::string cmd = ptxasPath + lineInfoOption + " -v --gpu-name=sm_" +
-                            std::to_string(capability) + capabilitySuffix +
+          // std::string cmd = ptxasPath + lineInfoOption + " -v --gpu-name=sm_" +
+          //                   std::to_string(capability) + capabilitySuffix +
+          //                   _fsrc + " -o " + outputFileName + logRedirect;
+          
+          std::string cmd = "nvcc --fatbin -gencode arch=compute_" + std::to_string(capability) + capabilitySuffix +
+                            ",code=compute_" + std::to_string(capability) + capabilitySuffix + 
+                            " -gencode arch=compute_" + std::to_string(capability) + capabilitySuffix +
+                            ",code=sm_" + std::to_string(capability) + capabilitySuffix + " " +
                             _fsrc + " -o " + outputFileName + logRedirect;
 
           int err = system(cmd.c_str());
